@@ -1,0 +1,8 @@
+# Pinned to the exact rustc that produced the binary staged in
+# erofs/vendor/bin/hw/vendor.oplus.hardware.urcc-service
+# (rustc 1.99.1, commit 58cf8f9c3). Bump this pin only together with
+# restaging the binary it ships.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+targets = ["aarch64-linux-android"]
