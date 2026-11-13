@@ -1,0 +1,20 @@
+[package]
+name = "urcc-service"
+version = "1.0.0"
+edition = "2021"
+
+# lib: the cross-platform resource core + node map (unit-tested on the host).
+[lib]
+name = "urcc_service"
+path = "src/lib.rs"
+
+# bin: the Android AIDL HAL binary. The shipped artifact name has dots, so the
+# build wraps the output (see ../../scripts/build_rust.sh).
+[[bin]]
+name = "urcc_service"
+path = "src/bin/urcc_service.rs"
+
+[profile.release]
+opt-level = 2
+debug = false
+strip = "symbols"

@@ -1,0 +1,18 @@
+# Rust port of the OPlus URCC HAL, built by rustc with the NDK clang linker.
+# The NDK's libbinder_ndk.so / liblog.so stubs live in the sysroot for API 35.
+[target.aarch64-linux-android]
+linker = "/opt/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+rustflags = [
+    "-C", "link-arg=-Wl,--no-undefined",
+    "-C", "link-arg=-Wl,-z,relro,-z,now",
+    "-C", "link-arg=-Wl,--build-id=none",
+    "-C", "link-arg=-llog",
+    # The real libbinder_ndk.so from the ROM tree, not the NDK stub: the stub
+    # only exports the public API, but this service needs the platform-only
+    # AServiceManager_addService / ABinderProcess_* entry points that the
+    # shipped service (linked from the same tree) uses.
+    "-C", "link-arg=/mnt/project/RomTools/ROM_WORKDIR/oos/erofs/system/system/lib64/libbinder_ndk.so",
+]
+
+[build]
+target-dir = "target"
