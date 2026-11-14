@@ -201,15 +201,8 @@ impl UrccCore {
                     Err(format!("write failed: {}", path))
                 }
             }
-            // The frequency bounding gate is FPSGO's thermal governor switch.
-            "bouncing_enable" => {
-                let path = "/sys/kernel/fpsgo/fbt/thrm_enable";
-                if io::write_file(path, value) {
-                    Ok(())
-                } else {
-                    Err(format!("write failed: {}", path))
-                }
-            }
+            // Main thermal HAL owns thermal throttling; no-op FPSGO thermal gate.
+            "bouncing_enable" => Ok(()),
             _ => Err(format!("unhandled action for {}", r.name)),
         }
     }
@@ -408,14 +401,20 @@ pub fn fill_state(id: u32) -> ResState {
     }
 }
 
+fn is_thermal_throttle_node(path: &str) -> bool {
+    path.starts_with("/sys/class/thermal/")
+        || path.ends_with("/scaling_max_freq")
+        || path.ends_with("/thermal_up_thres")
+}
+
 fn write_sanitized_node(path: &str, value: &str) -> Result<(), String> {
+    if is_thermal_throttle_node(path) {
+        return Ok(());
+    }
     if let Some((dir, leaf)) = path.rsplit_once('/') {
-        if path.starts_with("/sys/devices/system/cpu/cpufreq/")
-            && (leaf == "scaling_max_freq" || leaf == "scaling_min_freq")
-        {
-            let is_max = leaf == "scaling_max_freq";
+        if path.starts_with("/sys/devices/system/cpu/cpufreq/") && leaf == "scaling_min_freq" {
             let (min_freq, max_freq) = policy_bounds(dir);
-            let freq = sanitize_cpufreq_write(value, is_max, min_freq, max_freq)?;
+            let freq = sanitize_cpufreq_write(value, false, min_freq, max_freq)?;
             let freq_str = freq.to_string();
             return if io::write_file(path, &freq_str) {
                 Ok(())
@@ -498,5 +497,15 @@ mod tests {
         assert!(sanitize_cpufreq_write("5", false, 437_000, 2_600_000).is_err());
         assert_eq!(sanitize_cpufreq_write("1000", false, 437_000, 2_600_000), Ok(1_000_000));
         assert_eq!(sanitize_cpufreq_write("1800000", false, 437_000, 2_600_000), Ok(1_800_000));
+    }
+
+    #[test]
+    fn thermal_throttle_writes_noop_quietly() {
+        assert!(UrccCore::write_node("/sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq", "500000"));
+        assert!(UrccCore::write_node("/sys/class/thermal/cooling_device14/cur_state", "3"));
+        assert!(UrccCore::write_node("/sys/devices/system/cpu/cpu0/core_ctl/thermal_up_thres", "80"));
+        assert_eq!(UrccCore::apply(0x0101_00a0, "500000"), Ok(()));
+        assert_eq!(UrccCore::apply(0x0101_1e60, "500000"), Ok(()));
+        assert_eq!(UrccCore::apply(0x0101_03a0, "1"), Ok(()));
     }
 }
