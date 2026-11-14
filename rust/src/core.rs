@@ -97,7 +97,7 @@ impl UrccCore {
         if !WRITABLE_PREFIXES.iter().any(|p| path.starts_with(p)) {
             return false;
         }
-        io::write_file(path, value)
+        write_sanitized_node(path, value).is_ok()
     }
 
     /// Current value of a resource, as the string the framework expects.
@@ -156,11 +156,7 @@ impl UrccCore {
         };
         if matches!(r.kind, Kind::ReadWrite | Kind::Write) {
             if let Some(path) = r.path {
-                return if io::write_file(path, value) {
-                    Ok(())
-                } else {
-                    Err(format!("write failed: {}", path))
-                };
+                return write_sanitized_node(path, value);
             }
         }
         if r.kind == Kind::Read {
@@ -409,5 +405,98 @@ pub fn fill_state(id: u32) -> ResState {
         res_value: value,
         res_path: "0".to_string(),
         desc,
+    }
+}
+
+fn write_sanitized_node(path: &str, value: &str) -> Result<(), String> {
+    if let Some((dir, leaf)) = path.rsplit_once('/') {
+        if path.starts_with("/sys/devices/system/cpu/cpufreq/")
+            && (leaf == "scaling_max_freq" || leaf == "scaling_min_freq")
+        {
+            let is_max = leaf == "scaling_max_freq";
+            let (min_freq, max_freq) = policy_bounds(dir);
+            let freq = sanitize_cpufreq_write(value, is_max, min_freq, max_freq)?;
+            let freq_str = freq.to_string();
+            return if io::write_file(path, &freq_str) {
+                Ok(())
+            } else {
+                Err(format!("write failed: {}", path))
+            };
+        }
+    }
+    if io::write_file(path, value) {
+        Ok(())
+    } else {
+        Err(format!("write failed: {}", path))
+    }
+}
+
+fn policy_bounds(policy_dir: &str) -> (i64, i64) {
+    let (def_min, def_max) = match policy_dir.rsplit('/').next() {
+        Some("policy0") => (500_000, 2_000_000),
+        Some("policy4") => (437_000, 2_600_000),
+        Some("policy7") => (659_000, 3_000_000),
+        _ => (400_000, 3_000_000),
+    };
+    let min_freq = io::read_file(&format!("{}/cpuinfo_min_freq", policy_dir))
+        .and_then(|s| s.trim().parse::<i64>().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(def_min);
+    let max_freq = io::read_file(&format!("{}/cpuinfo_max_freq", policy_dir))
+        .and_then(|s| s.trim().parse::<i64>().ok())
+        .filter(|&v| v >= min_freq)
+        .unwrap_or(def_max);
+    (min_freq, max_freq)
+}
+
+/// Normalizes cpufreq writes so release sentinels, thermal levels, or MHz
+/// values cannot clamp scaling_max_freq to the cluster bottom floor.
+fn sanitize_cpufreq_write(
+    value: &str,
+    is_max: bool,
+    min_freq: i64,
+    max_freq: i64,
+) -> Result<i64, String> {
+    let raw = value
+        .trim()
+        .parse::<i64>()
+        .map_err(|_| format!("invalid cpufreq value: {}", value))?;
+    if raw <= 0 {
+        return Ok(if is_max { max_freq } else { min_freq });
+    }
+    if raw <= 100 {
+        return Err(format!("ignoring non-kHz cpufreq level: {}", raw));
+    }
+    let khz = if raw <= 10_000 {
+        raw.saturating_mul(1_000)
+    } else {
+        raw
+    };
+    Ok(khz.clamp(min_freq, max_freq))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_scaling_max_handles_sentinels_levels_and_units() {
+        assert_eq!(sanitize_cpufreq_write("0", true, 500_000, 2_000_000), Ok(2_000_000));
+        assert_eq!(sanitize_cpufreq_write("-1", true, 500_000, 2_000_000), Ok(2_000_000));
+        assert!(sanitize_cpufreq_write("4", true, 500_000, 2_000_000).is_err());
+        assert!(sanitize_cpufreq_write("100", true, 500_000, 2_000_000).is_err());
+        assert_eq!(sanitize_cpufreq_write("1200", true, 500_000, 2_000_000), Ok(1_200_000));
+        assert_eq!(sanitize_cpufreq_write("1500000", true, 500_000, 2_000_000), Ok(1_500_000));
+        assert_eq!(sanitize_cpufreq_write("9999999", true, 500_000, 2_000_000), Ok(2_000_000));
+        assert!(sanitize_cpufreq_write("bad", true, 500_000, 2_000_000).is_err());
+    }
+
+    #[test]
+    fn sanitize_scaling_min_handles_sentinels_levels_and_units() {
+        assert_eq!(sanitize_cpufreq_write("0", false, 437_000, 2_600_000), Ok(437_000));
+        assert_eq!(sanitize_cpufreq_write("-1", false, 437_000, 2_600_000), Ok(437_000));
+        assert!(sanitize_cpufreq_write("5", false, 437_000, 2_600_000).is_err());
+        assert_eq!(sanitize_cpufreq_write("1000", false, 437_000, 2_600_000), Ok(1_000_000));
+        assert_eq!(sanitize_cpufreq_write("1800000", false, 437_000, 2_600_000), Ok(1_800_000));
     }
 }
