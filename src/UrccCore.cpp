@@ -25,9 +25,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 
 namespace aidl::vendor::oplus::hardware::urcc::impl::oplus {
@@ -227,8 +229,31 @@ bool read_max_task_util(long long* util) {
     return true;
 }
 
-// Screen state: the display service is the only source on this build.
+// Screen state: the display service is the only source on this build. There
+// is no sysfs node or property carrying the framework's "Display State", so
+// the value has to come from `dumpsys`. That forks a shell on every call, so
+// the parsed result is memoized for a short TTL and the shell is only run on a
+// cold or expired cache. The mutex is held across the refresh so concurrent
+// readers share a single fork instead of each starting their own.
+struct ScreenOffCache {
+    std::mutex mutex;
+    bool valid = false;
+    bool found = false;
+    bool off = false;
+    std::chrono::steady_clock::time_point sampled_at{};
+};
+
 bool read_screen_off(bool* off) {
+    static ScreenOffCache cache;
+    std::lock_guard<std::mutex> lock(cache.mutex);
+    const auto now = std::chrono::steady_clock::now();
+    if (cache.valid && now - cache.sampled_at < std::chrono::seconds(1)) {
+        if (cache.found) {
+            *off = cache.off;
+        }
+        return cache.found;
+    }
+
     FILE* pipe = popen("dumpsys display 2>/dev/null | grep -m1 'Display State='", "r");
     if (pipe == nullptr) {
         return false;
@@ -246,6 +271,13 @@ bool read_screen_off(bool* off) {
         }
     }
     pclose(pipe);
+
+    cache.found = found;
+    if (found) {
+        cache.off = *off;
+    }
+    cache.valid = true;
+    cache.sampled_at = std::chrono::steady_clock::now();
     return found;
 }
 

@@ -14,6 +14,9 @@
 // std::invalid_argument inside system_server and takes the boot sequence
 // down.
 
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use crate::io_shim as io;
 use crate::table::{self, Kind};
 /// Cluster anchors: little / big / prime / "titanium", an alias of prime in
@@ -325,8 +328,44 @@ fn read_max_task_util() -> String {
     "-1".to_string()
 }
 
-/// Screen state: the display service is the only source on this build.
+/// Screen state: the display service is the only source on this build. There
+/// is no sysfs node or system property carrying the framework's "Display
+/// State", so the value has to come from `dumpsys`. That forks a shell on
+/// every call, so the parsed result is memoized for a short TTL and the shell
+/// is only run on a cold or expired cache. The Mutex is held across the
+/// refresh so concurrent readers share a single fork instead of each starting
+/// their own.
+struct ScreenOffCache {
+    value: String,
+    sampled_at: Option<Instant>,
+}
+
+const SCREEN_OFF_TTL: Duration = Duration::from_secs(1);
+
+static SCREEN_OFF_CACHE: OnceLock<Mutex<ScreenOffCache>> = OnceLock::new();
+
 fn read_screen_off() -> String {
+    let cache = SCREEN_OFF_CACHE.get_or_init(|| {
+        Mutex::new(ScreenOffCache {
+            value: "-1".to_string(),
+            sampled_at: None,
+        })
+    });
+    let mut cache = cache.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(at) = cache.sampled_at {
+        if at.elapsed() < SCREEN_OFF_TTL {
+            return cache.value.clone();
+        }
+    }
+    let value = read_screen_off_once();
+    cache.value = value.clone();
+    cache.sampled_at = Some(Instant::now());
+    value
+}
+
+/// Cold-start source for the screen state. Returns the same "0" / "1" / "-1"
+/// strings as before; only called when the TTL cache is cold or expired.
+fn read_screen_off_once() -> String {
     #[cfg(target_os = "android")]
     {
         use std::ffi::CString;
@@ -497,5 +536,27 @@ mod tests {
         assert_eq!(UrccCore::apply(0x0101_00a0, "500000"), Ok(()));
         assert_eq!(UrccCore::apply(0x0101_1e60, "500000"), Ok(()));
         assert_eq!(UrccCore::apply(0x0101_03a0, "1"), Ok(()));
+    }
+
+    #[test]
+    fn screen_off_cache_serves_fresh_value_without_refresh() {
+        // Seed a fresh value that differs from the cold-start fallback, so a
+        // read that reaches the fallback would fail the assertion.
+        let cache = SCREEN_OFF_CACHE.get_or_init(|| {
+            Mutex::new(ScreenOffCache {
+                value: "-1".to_string(),
+                sampled_at: None,
+            })
+        });
+        {
+            let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
+            guard.value = "1".to_string();
+            guard.sampled_at = Some(Instant::now());
+        }
+        assert_eq!(UrccCore::read(0x0106_0000), "1");
+        {
+            let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
+            guard.sampled_at = None;
+        }
     }
 }

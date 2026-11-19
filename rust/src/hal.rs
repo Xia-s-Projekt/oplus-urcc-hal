@@ -105,6 +105,10 @@ pub struct Service {
     /// The IUrccCallback class, as a raw pointer stored as usize (const after
     /// creation, so the raw pointer does not affect Sync).
     callback_class: usize,
+    /// Samplers are started on the first subscriber, not at service creation.
+    /// The handles are joined in on_destroy before this Service is freed.
+    res_sampler: Mutex<Option<thread::JoinHandle<()>>>,
+    thermal_sampler: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 impl Service {
@@ -115,6 +119,8 @@ impl Service {
             next_handle: AtomicI32::new(1),
             running: AtomicBool::new(true),
             callback_class: define_callback_class() as usize,
+            res_sampler: Mutex::new(None),
+            thermal_sampler: Mutex::new(None),
         }
     }
 
@@ -140,20 +146,35 @@ impl Service {
         }
         ok
     }
-}
 
-/// Spawns the sampler threads. `state` must point at a Service that outlives
-/// the process (the binder-created instance does).
-fn start_samplers(state: *const Service) {
-    let state = state as usize;
-    thread::Builder::new()
-        .name("UrccResSampler".into())
-        .spawn(move || res_sampler_loop(state))
-        .expect("res sampler thread");
-    thread::Builder::new()
-        .name("UrccThermalSampler".into())
-        .spawn(move || thermal_sampler_loop(state))
-        .expect("thermal sampler thread");
+    /// Start a sampler the first time a subscriber registers. The thread
+    /// parks on its interval and does no node reads or callback pushes while
+    /// the callbacks map is empty, so an idle service has no periodic work.
+    fn ensure_res_sampler(&self) {
+        let mut slot = self.res_sampler.lock().unwrap_or_else(|p| p.into_inner());
+        if slot.is_none() {
+            let state = self as *const Service as usize;
+            *slot = Some(
+                thread::Builder::new()
+                    .name("UrccResSampler".into())
+                    .spawn(move || res_sampler_loop(state))
+                    .expect("res sampler thread"),
+            );
+        }
+    }
+
+    fn ensure_thermal_sampler(&self) {
+        let mut slot = self.thermal_sampler.lock().unwrap_or_else(|p| p.into_inner());
+        if slot.is_none() {
+            let state = self as *const Service as usize;
+            *slot = Some(
+                thread::Builder::new()
+                    .name("UrccThermalSampler".into())
+                    .spawn(move || thermal_sampler_loop(state))
+                    .expect("thermal sampler thread"),
+            );
+        }
+    }
 }
 
 // The resources the framework polls for the performance gauge.
@@ -176,6 +197,17 @@ fn res_sampler_loop(state: usize) {
     let interval = Duration::from_millis(500);
     while svc.running.load(Ordering::Relaxed) {
         thread::sleep(interval);
+        if !svc.running.load(Ordering::Relaxed) {
+            break;
+        }
+        // With no subscribers there is nothing to read or push: stay parked
+        // until a subscriber registers instead of polling the resource nodes.
+        {
+            let callbacks = svc.res_callbacks.lock().unwrap_or_else(|p| p.into_inner());
+            if callbacks.is_empty() {
+                continue;
+            }
+        }
         let sample = sample_once();
         // Snapshot with extra strong references so a concurrent unregister
         // cannot release a binder we are about to transact on.
@@ -209,6 +241,16 @@ fn thermal_sampler_loop(state: usize) {
     let interval = Duration::from_secs(1);
     while svc.running.load(Ordering::Relaxed) {
         thread::sleep(interval);
+        if !svc.running.load(Ordering::Relaxed) {
+            break;
+        }
+        // No subscribers: skip the thermal zone read and the callback pushes.
+        {
+            let callbacks = svc.thermal_callbacks.lock().unwrap_or_else(|p| p.into_inner());
+            if callbacks.is_empty() {
+                continue;
+            }
+        }
         // mtktscpu (thermal_zone5) in milli-°C: push an event only when the
         // temperature moved by at least 1 °C.
         let temp = io::read_int("/sys/class/thermal/thermal_zone5/temp");
@@ -243,18 +285,34 @@ fn thermal_sampler_loop(state: usize) {
 // onTransact plumbing.
 
 pub unsafe extern "C" fn on_create(_args: *mut c_void) -> *mut c_void {
-    let svc = Box::new(Service::new());
-    let raw = Box::into_raw(svc);
-    start_samplers(raw);
-    raw as *mut c_void
+    // Samplers are started on first registration, not at service creation.
+    Box::into_raw(Box::new(Service::new())) as *mut c_void
 }
 
 pub unsafe extern "C" fn on_destroy(user_data: *mut c_void) {
-    if !user_data.is_null() {
-        let svc = Box::from_raw(user_data as *mut Service);
-        svc.running.store(false, Ordering::Relaxed);
-        drop(svc);
+    if user_data.is_null() {
+        return;
     }
+    let raw = user_data as *mut Service;
+    (*raw).running.store(false, Ordering::Relaxed);
+    // The sampler threads borrow `raw`; join them before the Service is freed.
+    let res_handle = (*raw)
+        .res_sampler
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    if let Some(handle) = res_handle {
+        let _ = handle.join();
+    }
+    let thermal_handle = (*raw)
+        .thermal_sampler
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    if let Some(handle) = thermal_handle {
+        let _ = handle.join();
+    }
+    drop(Box::from_raw(raw));
 }
 
 pub unsafe extern "C" fn on_transact(
@@ -467,6 +525,7 @@ fn dispatch_res_listening_register(svc: &Service, in_parcel: *const AParcel, out
     }
     let handle = svc.next_handle();
     svc.res_callbacks.lock().unwrap().insert(handle, CallbackRef(callback));
+    svc.ensure_res_sampler();
     write_ok_status(out)?;
     write_i32(out, handle)
 }
@@ -515,6 +574,7 @@ fn dispatch_thermal_listening_register(svc: &Service, in_parcel: *const AParcel,
     }
     let handle = svc.next_handle();
     svc.thermal_callbacks.lock().unwrap().insert(handle, CallbackRef(callback));
+    svc.ensure_thermal_sampler();
     write_ok_status(out)?;
     write_i32(out, handle)
 }
