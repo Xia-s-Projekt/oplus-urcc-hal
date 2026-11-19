@@ -30,6 +30,10 @@ The wire protocol is implemented against the libbinder_ndk C API. The C++ source
 - `ROM_TREE` pointing at an unpacked Android tree used to locate `libbinder_ndk.so`. The NDK stub does not export the platform-only `AServiceManager_*` / `ABinderProcess_*` symbols this service uses, so the build links against that library instead. Set `LIBBINDER_NDK` to override the path.
 - A C++17 toolchain and the AIDL compiler for the C++ sources and generated headers; the Rust build does not need them.
 
+## Prebuilt
+
+[Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-urcc-hal/releases/latest) — prebuilt AArch64 service binary.
+
 ## Build
 
 ```sh
