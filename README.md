@@ -4,7 +4,7 @@ A Rust implementation of the `vendor.oplus.hardware.urcc` AIDL HAL, with the C++
 
 ## What it does
 
-URCC (Unified Resource Control / Coordination) is the OPlus framework service for reading and tuning platform resources — CPU and GPU frequencies, core control, memory and thermal state. This project implements the `IUrcc` AIDL interface and its parcelables and serves them through a native resource-control core.
+URCC stands for Unified Resource Control / Coordination. Functionally, it is the OPlus framework service for reading and tuning platform resources — CPU and GPU frequencies, core control, memory and thermal state. It also delivers sampled resource and thermal state back to registered listeners. This project implements the `IUrcc` AIDL interface and its parcelables and serves them through a native resource-control core.
 
 The service:
 
