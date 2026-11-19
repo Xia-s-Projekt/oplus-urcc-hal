@@ -4,9 +4,8 @@
 // C++ code: the interface is fixed (vendor.oplus.hardware.urcc.IUrcc, version
 // 1, hash cae43655eaf0af39cbb6d273c5e2206eebe33a10, 14 methods numbered 1..14
 // plus the reserved pair getInterfaceVersion@0xffffff /
-// getInterfaceHash@0xfffffe that this ROM's Java stub uses), so the wire
-// format is fully known and the NDK C API is a stable C ABI that Rust can
-// bind directly.
+// getInterfaceHash@0xfffffe), so the wire format is fully known and the NDK C
+// API is a stable C ABI that Rust can bind directly.
 //
 // Wire format (matches what the generated ndk backend and the framework's
 // Java stub produce):
@@ -46,9 +45,8 @@ pub type TransactionCode = u32;
 
 pub const STATUS_OK: BinderStatus = 0;
 
-// The reserved transaction codes this ROM's framework stub uses (the pair
-// recovered from IUrcc$Stub.smali: TRANSACTIONS 1..14 for the methods,
-// 16777215 = getInterfaceVersion, 16777214 = getInterfaceHash).
+// Reserved transaction codes (methods are numbered 1..14 in declaration
+// order): 16777215 = getInterfaceVersion, 16777214 = getInterfaceHash.
 pub const FIRST_CALL_TRANSACTION: TransactionCode = 1;
 pub const TRANSACTION_GET_INTERFACE_VERSION: TransactionCode = 16777215;
 pub const TRANSACTION_GET_INTERFACE_HASH: TransactionCode = 16777214;

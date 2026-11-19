@@ -1,14 +1,10 @@
 // The URCC HAL method bodies.
 //
-// The shipped service forwards every call into the closed liburcccore.so.
-// That library is Qualcomm-specific (its resource map points at
-// /sys/class/kgsl/kgsl-3d0/..., /sys/class/devfreq/*qcom* and
-// /sys/devices/platform/soc/*.qcom,cpucc*...), and none of those nodes exist
-// on the MT6893 board, so the mapping and the request handling are done here
-// instead.  UrccCore owns the mapping and implements the classes that have no
-// MediaTek counterpart as real behaviour.
+// Resource mapping and request handling live here, in UrccCore: ids are
+// resolved to backing nodes and classes without a direct node are implemented
+// as native behaviour.
 //
-// Wire-format constraints kept from the shipped service:
+// Wire-format constraints:
 //   * the Binder status is always OK; failures are reported through the out
 //     parameter,
 //   * the log tag is "UrccFramework-halservice",
@@ -163,9 +159,8 @@ void Urcc::sampler_loop() {
 
 ::ndk::ScopedAStatus Urcc::urccResCtlRequest(const UrccRequestParcel& request,
                                              int32_t* _aidl_return) {
-    // The handle is 0 for an accepted request. A resource this port has no
-    // node for is skipped, not an error: the shipped core accepted requests
-    // for Qualcomm-only resources and the framework treats a non-zero return
+    // The handle is 0 for an accepted request. A resource with no backing
+    // node is skipped, not an error: the framework treats a non-zero return
     // as a failed request.
     apply_request(request.mUrccRequestData);
     *_aidl_return = 0;
@@ -288,7 +283,7 @@ void Urcc::sampler_loop() {
 ::ndk::ScopedAStatus Urcc::setRelatedSysInfo(int32_t type,
                                              const std::vector<uint8_t>& info,
                                              int32_t* _aidl_return) {
-    // The shipped service ignores both arguments and writes 0.
+    // Both arguments are ignored and 0 is returned.
     *_aidl_return = 0;
     return ::ndk::ScopedAStatus::ok();
 }

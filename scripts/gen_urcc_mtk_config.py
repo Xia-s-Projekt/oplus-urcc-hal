@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
-"""Generate the MTK URCC resource map for the X6739 (MT6893) port.
+"""Generate the URCC XML resource map.
 
-The shipped liburcccore.so builds its resource map from two sources:
+The URCC core builds its resource map from two sources:
 
-  * a built-in table of OnePlus resource names (479 of them) with their
-    default, Qualcomm-only node paths, and
-  * XML files found in /odm/etc/urcc and /vendor/etc/urcc, whose root element
+  * a built-in table of OnePlus resource names with their default node paths,
+  * XML files found in /odm/etc/urcc and /vendor/etc/urcc whose root element
     is <ResourceConfigs>.
 
-This generator writes that XML for the MTK board:
+This generator writes that XML so that every resource id the framework asks
+for resolves to a node on the target platform.
 
-  /vendor/etc/urcc/urcc_x6739.xml
-
-so that every resource id the framework asks for resolves to a real MTK node
-instead of a Qualcomm one.
-
-Id composition (recovered from liburcccore.so, UrccResMap::convertToResId and
-UrccResMap::urccParseResource):
+Id composition:
 
     id = ((mode_id & 0xf) << 24) | ((module_id & 0xff) << 16) | ((res_id & 0x1ff) << 4)
 
@@ -24,19 +18,14 @@ UrccResMap::urccParseResource):
   * module_id comes from each <config module_id="..."> element
   * res_id    comes from each <resourcenode res_id="..."> attribute and is
     masked to 9 bits, so ids whose res field exceeds 0x1ff cannot be
-    expressed in XML (25 built-in MEM_DCVS_* ids have that shape; the framework
-    never asks for them and they are skipped here).
+    expressed in XML and are skipped.
 
-The framework's ids (RE/framework/oplus-framework/com/oplus/uah/
-UAHResourceConstants.smali) are identical to the built-in table's ids, so the
-generated ids match the framework byte for byte.
+The framework's resource ids match the built-in table's ids, so the generated
+ids match byte for byte.
 
-Node paths come from the verified device sweep in
-ReconstructedHALSource/Oplus/OplusUrcc/analysis/x6739-node-map.md.
-Classes with no MTK counterpart are pointed at a file under
-/data/vendor/urcc/sim/ that the companion helper (sim/urcc_sim.cpp) keeps
-up to date; those entries are marked read_only because the value is computed,
-not stored.
+Classes with no counterpart point at a file under /data/vendor/urcc/sim/ that
+the companion helper keeps up to date; those entries are read_only because the
+value is computed, not stored.
 """
 
 import argparse
@@ -44,13 +33,13 @@ import os
 import re
 import sys
 
-# --- cluster topology of the X6739 (verified) -------------------------------
-# OPlus cluster names -> this board's cpufreq policy and core_ctl anchor CPU.
+# --- cluster topology ---
+# OPlus cluster names -> cpufreq policy and core_ctl anchor CPU.
 CLUSTER = {
-    "SILVER": ("policy0", "cpu0"),   # 4x A55, little
-    "GOLD": ("policy4", "cpu4"),      # 3x A78, big
-    "PRIME": ("policy7", "cpu7"),     # 1x A510, prime
-    "TITANIUM": ("policy7", "cpu7"),  # no 4th tier on this SoC -> prime
+    "SILVER": ("policy0", "cpu0"),   # 4x little
+    "GOLD": ("policy4", "cpu4"),      # 3x big
+    "PRIME": ("policy7", "cpu7"),     # 1x prime
+    "TITANIUM": ("policy7", "cpu7"),  # no fourth tier -> prime
 }
 
 MALI = "/sys/class/devfreq/13000000.mali"
@@ -59,7 +48,7 @@ FPSGO = "/sys/kernel/fpsgo/common"
 THERMAL_CPU = "/sys/class/thermal/thermal_zone5"
 SIM_DIR = "/data/vendor/urcc/sim"
 
-# cgroup v1 cpuset group present on the device -> /dev/cpuset/<group>/cpus
+# cgroup v1 cpuset group -> /dev/cpuset/<group>/cpus
 CPUSET_GROUPS = {
     "FOREGROUND": "foreground",
     "BACKGROUND": "background",
@@ -139,12 +128,12 @@ def node_for(name):
             return "/sys/class/thermal/cooling_device%s/cur_state" % cdev, False
         return sim(name), False
 
-    # Everything else has no MTK counterpart: the helper computes it.
+    # Everything else has no node of its own: the helper computes it.
     return sim(name), False
 
 
 def load_builtin(path):
-    """name -> id, from the extracted built-in resource table."""
+    """name -> id, from the built-in resource table."""
     out = {}
     with open(path) as fh:
         for line in fh:
@@ -170,8 +159,7 @@ def generate(builtin, only_framework):
         mode = (rid >> 24) & 0xf
         module = (rid >> 16) & 0xff
         res = (rid >> 4) & 0x1ff
-        # the XML res_id attribute is masked to 9 bits by the shipped core
-        # (urccParseResource: (res_id & 0x1ff) << 4), so ids whose res field
+        # the XML res_id attribute is masked to 9 bits, so ids whose res field
         # is wider than that cannot be expressed in the XML at all.
         if ((rid >> 4) & 0xfff) > 0x1ff:
             skipped.append((name, rid))
@@ -184,14 +172,12 @@ def generate(builtin, only_framework):
 
     out = ['<?xml version="1.0" encoding="utf-8"?>',
            "<!--",
-           "  URCC resource map for the Infinix GT 10 Pro (X6739, MT6893).",
+           "  URCC resource map for the OPlus URCC HAL.",
            "",
-           "  Generated by ReconstructedHALSource/Oplus/OplusUrcc/scripts/",
-           "gen_urcc_mtk_config.py.",
-           "  Every nodepath was read on the device; see analysis/x6739-node-map.md.",
+           "  Auto-generated from scripts/gen_urcc_mtk_config.py.",
            "",
-           "  Resources with no MTK node point at /data/vendor/urcc/sim/<NAME>,",
-           "  which the companion helper (sim/urcc_sim.cpp) keeps up to date.",
+           "  Resources with no direct node point at /data/vendor/urcc/sim/<NAME>,",
+           "  which the companion helper keeps up to date.",
            "  Those entries are read_only.",
            "-->",
            '<ResourceConfigs mode_id="1">']
@@ -215,7 +201,7 @@ def generate(builtin, only_framework):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--builtin", required=True,
-                    help="name->id table extracted from liburcccore.so")
+                    help="name->id table for built-in resources")
     ap.add_argument("--framework-constants", action="store_true",
                     help="only emit the resources the framework asks for")
     ap.add_argument("--out", required=True)

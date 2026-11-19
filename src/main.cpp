@@ -1,12 +1,10 @@
 /*
  * OPlus URCC AIDL HAL — service entry point.
  *
- * The startup sequence was recovered from the shipped binary
- * (odm/bin/hw/vendor.oplus.hardware.urcc-service):
+ * Startup sequence:
  *
  *   ABinderProcess_setThreadPoolMaxThreadCount(0);
- *   impl   = new Urcc();                     // ctor calls load_core_lib() and
- *                                            // then urccModuleInit()
+ *   impl   = new Urcc();                     // ctor initializes the core
  *   name   = IUrcc::descriptor + "/default";
  *   status = AServiceManager_addService(impl->asBinder(), name);
  *   set SCHED_FIFO on the main thread, name it "UrccMainThread";
@@ -41,8 +39,7 @@ int main(int argc, char** argv) {
     auto service = ndk::SharedRefBase::make<
             aidl::vendor::oplus::hardware::urcc::impl::oplus::Urcc>();
 
-    // The shipped binary builds the instance name from the interface
-    // descriptor (owned by the sidecar) plus "/default".
+    // The instance name is the interface descriptor plus "/default".
     std::string instance = std::string(
             aidl::vendor::oplus::hardware::urcc::IUrcc::descriptor) + "/default";
 
@@ -54,8 +51,8 @@ int main(int argc, char** argv) {
                             static_cast<int>(status));
     }
 
-    // The shipped service puts the registering thread on SCHED_FIFO and
-    // renames it, so the Binder worker is scheduled ahead of normal work.
+    // Put the registering thread on SCHED_FIFO and rename it so the Binder
+    // worker is scheduled ahead of normal work.
     sched_param param{};
     param.sched_priority = 1;
     const int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);

@@ -5,9 +5,7 @@ import vendor.oplus.hardware.urcc.UrccRequestData;
 
 // UrccRequestParcel — the request the client sends to the URCC HAL.
 //
-// Field order is the wire order and must not change: the framework's Java stub
-// (RE/framework/oplus-framework/vendor/oplus/hardware/urcc/UrccRequestParcel.smali)
-// writes and reads exactly this sequence.
+// Field order is the wire order and must not change.
 parcelable UrccRequestParcel {
     int type;
     UrccRequestData[] mUrccRequestData;

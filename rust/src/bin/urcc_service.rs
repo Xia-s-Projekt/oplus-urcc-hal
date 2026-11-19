@@ -1,21 +1,17 @@
-// OPlus URCC AIDL HAL service entry point (Rust port).
+// OPlus URCC AIDL HAL service entry point.
 //
-// The startup sequence was recovered from the shipped binary
-// (odm/bin/hw/vendor.oplus.hardware.urcc-service):
+// Startup sequence:
 //
 //   ABinderProcess_setThreadPoolMaxThreadCount(0);
-//   impl   = new Urcc();                      // ctor calls load_core_lib()
-//                                            // and then urccModuleInit()
+//   impl   = new Urcc();                      // ctor initializes the core
 //   name   = IUrcc::descriptor + "/default";
 //   status = AServiceManager_addService(impl->asBinder(), name);
 //   set SCHED_FIFO (prio 1) on the main thread, name it "UrccMainThread";
 //   mlockall;
 //   ABinderProcess_joinThreadPool();
 //
-// The log tag is "UrccFramework-halservice". In this port the closed
-// liburcccore.so is not dlopen'ed at all: the resource core is implemented
-// natively (see lib/src/core.rs) because the shipped core drives Qualcomm-only
-// nodes and faults on this MTK board.
+// The log tag is "UrccFramework-halservice". The resource core is implemented
+// natively in core.rs.
 
 #[path = "../wire.rs"]
 mod wire;
@@ -55,9 +51,8 @@ extern "C" {
 }
 
 fn main() {
-    // The shipped service locks its pages in RAM and puts the registering
-    // thread on SCHED_FIFO so the Binder worker is scheduled ahead of normal
-    // work.
+    // Lock pages in RAM and put the registering thread on SCHED_FIFO so the
+    // Binder worker is scheduled ahead of normal work.
     //
     // SAFETY: plain libc calls with scalar/POD arguments.
     let rc = unsafe { mlockall(MCL_CURRENT | MCL_FUTURE) };

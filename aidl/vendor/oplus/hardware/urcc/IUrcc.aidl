@@ -6,18 +6,8 @@ import vendor.oplus.hardware.urcc.UrccRequestParcel;
 
 // IUrcc — Oplus Unified Resource Control / Coordination.
 //
-// Recovered from three independent sources that agree:
-//   * the framework's Java stub
-//     (RE/framework/oplus-framework/vendor/oplus/hardware/urcc/IUrcc.smali and
-//      IUrcc$Stub$Proxy.smali, which fix both the signatures and the
-//      transaction codes),
-//   * the shipped AIDL backend
-//     (vendor.oplus.hardware.urcc-V1-ndk_platform.so, IUrccDefault::*),
-//   * the shipped service
-//     (odm/bin/hw/vendor.oplus.hardware.urcc-service).
-//
-// The method order below IS the transaction order (AIDL numbers methods from 1
-// in declaration order). The framework stub uses:
+// The method order below is the transaction order (AIDL numbers methods from 1
+// in declaration order):
 //   1 urccInit              8 urccPropertySet
 //   2 urccResCtlRequest     9 urccThermalListeningRegister
 //   3 urccResCtlRelease    10 urccThermalListeningUnRegister

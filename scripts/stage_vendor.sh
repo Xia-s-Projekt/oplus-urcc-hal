@@ -1,30 +1,26 @@
 #!/bin/bash
-# Stage the rebuilt OPlus URCC AIDL HAL into the unpacked vendor tree.
+# Stage the rebuilt OPlus URCC AIDL HAL into an unpacked vendor tree.
 #
-# Staged:
-#   erofs/vendor/bin/hw/vendor.oplus.hardware.urcc-service   (rebuilt here)
-#   erofs/vendor/etc/init/vendor.oplus.hardware.urcc-service.rc
-#   erofs/vendor/etc/vintf/manifest/manifest_oplus_urcc_aidl.xml
+# Destination, under $ROM_TREE:
+#   vendor/bin/hw/vendor.oplus.hardware.urcc-service
+#   vendor/etc/init/vendor.oplus.hardware.urcc-service.rc
+#   vendor/etc/vintf/manifest/manifest_oplus_urcc_aidl.xml
 #
-# The rebuilt service owns the AIDL transport itself: it compiles the
-# generated IUrcc/UrccRequestData/UrccRequestParcel sources into the binary,
-# so the interface descriptor, the interface hash
-# (cae43655eaf0af39cbb6d273c5e2206eebe33a10) and the parcel layout all come
-# from this build and cannot drift from the shipped sidecar. The shipped
-# vendor/lib64/vendor.oplus.hardware.urcc-V1-ndk_platform.so stays in the
-# tree untouched for anything else that links it.
+# The service carries the AIDL transport itself: the generated
+# IUrcc/UrccRequestData/UrccRequestParcel sources are compiled into the binary,
+# so the interface descriptor, the interface hash and the parcel layout come
+# from this build. The AIDL backend library in vendor/lib64/ is left untouched.
 #
-# The closed liburcccore.so is no longer used: it drives Qualcomm-only nodes
-# and faults on this MTK board. It stays in the tree untouched but nothing
-# links it any more.
+# Resource handling is implemented natively; no closed core library is linked.
 #
 # This only touches files in the unpacked tree. It does NOT repack, does NOT
 # flash, and does NOT touch fs_config or file_contexts.
 set -euo pipefail
 
+: "${ROM_TREE:?set ROM_TREE to an unpacked Android tree}"
+
 W=$(cd "$(dirname "$0")/.." && pwd)
-ROM_TREE=${ROM_TREE:-/mnt/project/RomTools/ROM_WORKDIR/oos/erofs}
-ORIG="$W/re/original"
+ORIG="$W/build/original"
 
 GRN=$'\033[32m'; RED=$'\033[31m'; NC=$'\033[0m'
 
@@ -33,7 +29,7 @@ PAIRS=(
   "$W/work/release/vendor.oplus.hardware.urcc-service|bin/hw/vendor.oplus.hardware.urcc-service|0755"
 )
 
-# --- preserve the shipped originals ----------------------------------------
+# --- preserve the existing binaries -----------------------------------------
 mkdir -p "$ORIG"
 PRESERVE_ONLY="$W/work/release/vendor.oplus.hardware.urcc-service"
 for p in "${PAIRS[@]}"; do
@@ -49,11 +45,11 @@ for p in "${PAIRS[@]}"; do
     b=$(sha256sum "$src"  | cut -c1-16)
     if [[ "$a" == "$b" ]]; then
         echo -e "  ${RED}REFUSING${NC} to preserve $(basename "$dst"): the tree already holds the rebuild"
-        echo "         and no shipped original is in $ORIG."
+        echo "         and no saved original is in $ORIG."
         exit 1
     fi
     cp -p "$live" "$keep"
-    echo "  preserved $(basename "$dst") -> re/original/"
+    echo "  preserved $(basename "$dst") -> build/original/"
 done
 
 # --- stage ------------------------------------------------------------------
@@ -122,5 +118,5 @@ if [[ -f "$svc" ]]; then
 fi
 
 echo
-echo "  next: flash/repack is NOT done. Verify on the device, then repack explicitly if wanted."
+echo "  next: repack/flash is NOT done. Verify on the target, then repack explicitly if wanted."
 exit $rc

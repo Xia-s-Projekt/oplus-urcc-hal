@@ -1,4 +1,4 @@
-// Native URCC resource core for the X6739 (MT6893) port.
+// Native URCC resource core.
 //
 // The OnePlus resource ids come in two encodings:
 //
@@ -17,12 +17,12 @@
 
 namespace aidl::vendor::oplus::hardware::urcc::impl::oplus {
 
-// How a resource is served on this board.
+// How a resource value is served.
 enum class Kind {
     kRead,       // the value is read from a file
     kWrite,      // a control request writes the file
     kReadWrite,  // both
-    kDerived,    // the value is computed from MTK sources
+    kDerived,    // the value is computed from other sources
     kApplied,    // no node: a control request performs the equivalent action
 };
 
@@ -50,9 +50,9 @@ class UrccCore {
 
     // Path-addressed requests. The UAH client drives the core by node path
     // (liboplus-uah-client.so: urcc_resctl_request_by_path), so a request
-    // that names a node is applied to that node. Only the nodes this port
-    // has an equivalent for are writable, so a request for a Qualcomm-only
-    // node is refused instead of silently doing nothing.
+    // that names a node is applied to that node. Only supported nodes are
+    // writable, so a request for another node is refused instead of silently
+    // doing nothing.
     bool write_node(const std::string& path, const std::string& value);
     std::string read_node(const std::string& path);
 

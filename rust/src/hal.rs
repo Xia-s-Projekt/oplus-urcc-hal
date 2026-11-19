@@ -1,7 +1,7 @@
 // The URCC HAL: service state, the onTransact dispatch for all 14 interface
 // methods plus the reserved pair, and the sampler threads.
 //
-// Every handler keeps the shipped wire contract:
+// Every handler keeps the wire contract:
 //   * the binder status is always OK; a failed request is reported through
 //     the out parameter (the framework treats a non-zero int32 return from
 //     urccResCtlRequest as a failed request, so 0 means "accepted"),
@@ -402,9 +402,8 @@ fn apply_request(items: &[RequestItem]) -> usize {
 
 fn dispatch_res_ctl_request(in_parcel: *const AParcel, out: *mut AParcel) -> DispatchResult {
     let request = read_request_parcel(in_parcel)?;
-    // The handle is 0 for an accepted request. A resource this port has no
-    // node for is skipped, not an error: the shipped core accepted requests
-    // for Qualcomm-only resources and the framework treats a non-zero return
+    // The handle is 0 for an accepted request. A resource with no backing
+    // node is skipped, not an error: the framework treats a non-zero return
     // as a failed request.
     apply_request(&request.items);
     write_ok_status(out)?;
@@ -482,8 +481,8 @@ fn dispatch_res_listening_unregister(svc: &Service, in_parcel: *const AParcel, o
 
 fn dispatch_property_get(in_parcel: *const AParcel, out: *mut AParcel) -> DispatchResult {
     let key = read_string(in_parcel)?.unwrap_or_default();
-    // Matches the shipped core: urccPropertyGet is property_get(key, buf,
-    // NULL): a real system-property read, not an in-memory store.
+    // urccPropertyGet is property_get(key, buf, NULL): a real system-property
+    // read, not an in-memory store.
     let value = io::property_get(&key).unwrap_or_default();
     log(LOG_LEVEL_INFO, LOG_TAG, &format!("Urcc::urccPropertyGet key={} -> {}", key, value));
     write_ok_status(out)?;
@@ -494,7 +493,7 @@ fn dispatch_property_set(in_parcel: *const AParcel, out: *mut AParcel) -> Dispat
     let key = read_string(in_parcel)?.unwrap_or_default();
     let value = read_string(in_parcel)?.unwrap_or_default();
     let ok = io::property_set(&key, &value);
-    // The shipped core special-cases its own debug keys after the write
+    // Debug keys are special-cased after the write
     // (urccUpdateZdbDebugFlag / urccUpdateUnitTestFlag).
     if key == "vendor.urcc.zdbdebug_on" || key == "vendor.urcc.unittest_on" {
         log(LOG_LEVEL_INFO, LOG_TAG, &format!("urcc debug prop {} set to {}", key, value));
@@ -539,7 +538,7 @@ fn dispatch_uah_notify_ext(in_parcel: *const AParcel, out: *mut AParcel) -> Disp
 fn dispatch_set_related_sys_info(in_parcel: *const AParcel, out: *mut AParcel) -> DispatchResult {
     let _type = read_i32(in_parcel)?;
     let _info = read_byte_array(in_parcel)?;
-    // The shipped service ignores both arguments and writes 0.
+    // Both arguments are ignored and 0 is returned.
     write_ok_status(out)?;
     write_i32(out, 0)
 }

@@ -8,8 +8,8 @@ edition = "2021"
 name = "urcc_service"
 path = "src/lib.rs"
 
-# bin: the Android AIDL HAL binary. The shipped artifact name has dots, so the
-# build wraps the output (see ../../scripts/build_rust.sh).
+# bin: the Android AIDL HAL binary. Its installed name has dots, so the build
+# wraps the output (see ../build_rust.sh).
 [[bin]]
 name = "urcc_service"
 path = "src/bin/urcc_service.rs"

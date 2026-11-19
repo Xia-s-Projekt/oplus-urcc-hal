@@ -1,11 +1,10 @@
-// Resource table for the X6739 (MT6893) port of the OPlus URCC HAL.
+// Resource table for the OPlus URCC HAL.
 //
-// Ported 1:1 from the C++ reconstruction (src/UrccResourceTable.inc, generated
-// by scripts/gen_urcc_resource_table.py from the OnePlus resource names the
-// shipped liburcccore.so carries in its built-in table), so the ids served
-// here are the ids the framework and the native UAH client send.
+// Kept in sync with src/UrccResourceTable.inc, produced by
+// scripts/gen_urcc_resource_table.py from the resource-name/id table. The ids
+// served here are the ids the framework and the native UAH client send.
 //
-// id encoding (recovered from liburcccore.so's urccParseResource):
+// id encoding:
 //   library form   ((mode & 0xf) << 24) | ((module & 0xff) << 16) | ((res & 0x1ff) << 4)
 //   framework form the same value with the mode nibble moved to bits 28..31
 //   (e.g. 0x10010ba0). normalize_id() folds both onto the library form.
@@ -20,7 +19,7 @@ pub enum Kind {
     Write,
     /// Both.
     ReadWrite,
-    /// Value computed from MTK sources (compatibility/simulation layer).
+    /// Value computed from other sources (compatibility layer).
     Derived,
     /// No node: a control request performs the equivalent action.
     Applied,
@@ -88,7 +87,7 @@ pub const RESOURCES: &[Resource] = &[
     Resource { id: 0x01010030, name: "CPU_FREQ_SCALING_MIN_PRIME", module: 1, kind: Kind::ReadWrite, path: Some("/sys/devices/system/cpu/cpufreq/policy7/scaling_min_freq"), action: None },
     Resource { id: 0x01010010, name: "CPU_FREQ_SCALING_MIN_SILVER", module: 1, kind: Kind::ReadWrite, path: Some("/sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq"), action: None },
     Resource { id: 0x01010040, name: "CPU_FREQ_SCALING_MIN_TITANIUM", module: 1, kind: Kind::ReadWrite, path: Some("/sys/devices/system/cpu/cpufreq/policy7/scaling_min_freq"), action: None },
-    // --- CPU: load / scheduler (no MTK node: compat/sim layer) ------------
+    // --- CPU: load / scheduler (compatibility layer) ----------------------
     Resource { id: 0x010108b0, name: "CPU_FREQ_TARGET_LOAD_GOLD", module: 1, kind: Kind::Derived, path: None, action: Some("cluster_load_1") },
     Resource { id: 0x010108c0, name: "CPU_FREQ_TARGET_LOAD_PRIME", module: 1, kind: Kind::Derived, path: None, action: Some("cluster_load_2") },
     Resource { id: 0x010108a0, name: "CPU_FREQ_TARGET_LOAD_SILVER", module: 1, kind: Kind::Derived, path: None, action: Some("cluster_load_0") },

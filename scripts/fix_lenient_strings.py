@@ -7,11 +7,10 @@ dropped before it reaches the implementation:
 
     field read mUrccRequestData status=-2147483640   (STATUS_UNEXPECTED_NULL)
 
-The shipped sidecar read the same data with an allocator that accepts a
-non-positive length and yields an empty string, which is why the original
-service worked. This script rewrites the generated sources to use such an
-allocator, so the rebuilt transport parses the framework's requests exactly
-like the shipped one.
+The AIDL backend used by clients read the same data with an allocator that
+accepts a non-positive length and yields an empty string. This script rewrites
+the generated sources to use such an allocator, so the transport parses the
+framework's requests the same way.
 """
 
 import os
@@ -23,7 +22,7 @@ gen = sys.argv[1]
 HELPER = """namespace {
 // The framework writes a null String as a length of -1. The platform
 // allocator for std::string rejects that, so it is replaced here by one that
-// maps a non-positive length to an empty string, like the shipped sidecar.
+// maps a non-positive length to an empty string, like the client-side backend.
 bool urcc_lenient_string_allocator(void* stringData, int32_t length, char** buffer) {
   std::string* str = static_cast<std::string*>(stringData);
   if (length <= 0) {

@@ -7,7 +7,7 @@
 // IUrccCallback binder to receive the sampler's pushed events.
 //
 // Build: same crate, `cargo build --release --target aarch64-linux-android
-// --bin urcc_probe`. Run as root from /data/local/tmp.
+// --bin urcc_probe`. Run as root on the target.
 
 #[path = "../wire.rs"]
 mod wire;
@@ -266,9 +266,8 @@ fn main() {
     // 1: urccInit
     probe.run("urccInit", 1, |_| (), |_| true);
 
-    // 7: urccPropertyGet("ro.hardware"): the shipped core forwards to a real
-    // system-property read (property_get), so this must come back as
-    // "mt6893" on this board.
+    // 7: urccPropertyGet("ro.hardware") must return the platform's hardware
+    // property value; the service forwards to a real system-property read.
     probe.run(
         "urccPropertyGet(ro.hardware)==mt6893",
         7,

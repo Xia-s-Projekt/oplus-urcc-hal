@@ -1,27 +1,38 @@
 #!/bin/bash
-# Build the Rust port of the OPlus URCC AIDL HAL for aarch64 Android.
+# Build the Rust URCC AIDL HAL for aarch64 Android.
 #
-# Output:
-#   rust/target/aarch64-linux-android/release/vendor.oplus.hardware.urcc-service  (the HAL)
-#   rust/target/aarch64-linux-android/release/urcc_probe                          (wire-level test client)
+# Output, under rust/target/aarch64-linux-android/release/:
+#   vendor.oplus.hardware.urcc-service   the HAL binary
+#   urcc_probe                           wire-level test client
 #
-# Requires: rustc/cargo with the aarch64-linux-android target installed
-# (rustup target add aarch64-linux-android) and Android NDK r27+ at
-# /opt/android-sdk/ndk/27.0.12077973. The link uses the ROM tree's real
-# libbinder_ndk.so (erofs/system/system/lib64) because the platform-only
-# AServiceManager_* / ABinderProcess_* entry points are not exported by the
-# NDK stub. See .cargo/config.toml.
+# Requires the pinned Rust toolchain with the aarch64-linux-android target,
+# Android NDK r27+ (ANDROID_NDK_HOME) and ROM_TREE pointing at an unpacked
+# Android tree that provides libbinder_ndk.so with the platform-only binder
+# entry points. Set LIBBINDER_NDK to override the library path.
 set -eu
+
+: "${ANDROID_NDK_HOME:?set ANDROID_NDK_HOME to the Android NDK root}"
+: "${ROM_TREE:?set ROM_TREE to an unpacked Android tree}"
 
 W=$(cd "$(dirname "$0")" && pwd)
 cd "$W/rust"
+
+NDK="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+LIBBINDER_NDK=${LIBBINDER_NDK:-"$ROM_TREE/system/system/lib64/libbinder_ndk.so"}
+
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/bin/aarch64-linux-android35-clang"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="\
+-C link-arg=-Wl,--no-undefined \
+-C link-arg=-Wl,-z,relro,-z,now \
+-C link-arg=-Wl,--build-id=none \
+-C link-arg=-llog \
+-C link-arg=$LIBBINDER_NDK"
 
 cargo build --release --target aarch64-linux-android --bins
 # Host unit tests for the cross-platform core (node map, compat layer).
 cargo test
 
 OUT=target/aarch64-linux-android/release
-NDK=/opt/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64
 
 install -m 0755 "$OUT/urcc_service" "$OUT/vendor.oplus.hardware.urcc-service"
 

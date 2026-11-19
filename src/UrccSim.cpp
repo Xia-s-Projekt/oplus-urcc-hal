@@ -1,15 +1,8 @@
-// Simulator for the URCC resource classes that have no MediaTek node.
+// Simulator for URCC resource classes that have no direct sysfs node.
 //
-// The closed liburcccore.so reads every resource value from a file path
-// (the "nodepath" of the resource map in /vendor/etc/urcc/urcc_x6739.xml).
-// For the OnePlus classes that Qualcomm exposed as sysfs knobs and this
-// MT6893 board does not have, the map points at
-// /data/vendor/urcc/sim/<RESOURCE_NAME> instead, and this thread keeps those
-// files up to date.
-//
-// Everything here is derived from nodes verified on the device; the sources
-// are listed per function and collected in
-// ReconstructedHALSource/Oplus/OplusUrcc/analysis/x6739-node-map.md.
+// Resource values are read from the "nodepath" of the resource map in
+// /vendor/etc/urcc/urcc_x6739.xml. Classes without a backing node point at
+// /data/vendor/urcc/sim/<RESOURCE_NAME>, which this thread keeps up to date.
 //
 // The service runs as root (init rc: user root, group root readproc), so it
 // can read /proc/stat, the Mali debugfs counters and the thermal zone.

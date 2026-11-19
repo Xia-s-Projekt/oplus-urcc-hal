@@ -1,36 +1,21 @@
 // The URCC HAL implementation.
 //
-// The shipped service is a thin shim over a closed core library:
+// The service registers "vendor.oplus.hardware.urcc.IUrcc/default" and
+// implements the AIDL surface the framework links against. Resource handling
+// lives in UrccCore: it maps OnePlus resource ids to backing nodes and
+// implements classes without a direct node as native behaviour
+// (see src/UrccCore.cpp).
 //
-//   odm/bin/hw/vendor.oplus.hardware.urcc-service
-//     dlopen("liburcccore.so", RTLD_NOW)
-//     dlsym()s 13 C-linkage entry points into the object
-//     calls urccModuleInit() from the constructor
-//     registers "vendor.oplus.hardware.urcc.IUrcc/default"
+// AIDL transport:
 //
-//   odm/lib64/liburcccore.so
-//     the actual implementation, a closed binary this port ships as-is
-//
-// liburcccore.so is built for Qualcomm boards: its resource map points at
-// /sys/class/kgsl/kgsl-3d0/..., /sys/class/devfreq/*qcom* and
-// /sys/devices/platform/soc/*.qcom,cpucc*..., none of which exist on this
-// MT6893 board, and its request path faults (SIGSEGV) when a requested
-// resource has no entry in that map.  So the resource handling lives here
-// instead: UrccCore owns the mapping from OnePlus resource to the MediaTek
-// node that carries the same information, and implements the classes that
-// have no MediaTek counterpart as real behaviour (see src/UrccCore.cpp).
-//
-// The AIDL surface is unchanged, because the framework links against it:
-//
-//   * the parcelable layout comes from the shipped platform sidecar
-//     (vendor.oplus.hardware.urcc-V1-ndk_platform.so), which is preserved
-//     as-is and owns the interface hash, the vtable and the onTransact
-//     dispatch,
+//   * the parcelable layout is defined by the AIDL backend library
+//     (vendor.oplus.hardware.urcc-V1-ndk_platform.so), which owns the
+//     interface hash, the vtable and the onTransact dispatch,
 //   * the service derives from BnUrcc, not IUrccDefault, so the transport
 //     symbols stay undefined in the service and are resolved from the
-//     sidecar at load time,
+//     backend library at load time,
 //   * the Binder status is always OK; a failed request is reported through
-//     the out parameter, as the shipped service does.
+//     the out parameter.
 //
 // The client parses the returned values numerically: liboplus-uah-client.so
 // runs std::stoi() on them.  An empty string throws std::invalid_argument

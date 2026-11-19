@@ -1,19 +1,12 @@
-// Native URCC resource core for the X6739 (MT6893) port.
+// Native URCC resource core.
 //
-// The shipped liburcccore.so drives Qualcomm-only nodes (/sys/class/kgsl/
-// kgsl-3d0/..., /sys/class/devfreq/*qcom*, /sys/devices/system/cpu/cpufreq/
-// policy{0,6,7}/...), which this MTK board does not have, and its request
-// path faults (SIGSEGV) when a requested resource has no entry in its map.
-//
-// Contract kept from the shipped core:
+// The core keeps the service contract:
 //   * a resource is identified by the id the framework uses
 //     (UAHResourceConstants, e.g. 0x01010ba0 for CPU_CORE_CTL_MAX_CPUS_GOLD),
 //   * a resource state is read from a node and reported as a string,
 //   * a control request writes a value to a node and returns a handle,
-//   * resources that OnePlus exposed as knobs without a MediaTek counterpart
-//     are implemented as native behaviour (the equivalent tuning is applied
-//     on the MTK nodes that exist) instead of being reported as a fixed
-//     number. Those compat/sim sources are the derive() actions below.
+//   * resource classes with no direct sysfs node are implemented as native
+//     behaviour (the derive() actions below) instead of a fixed number.
 //
 // Wire-format note: the framework's UahGetFeatureStatus runs std::stoi() on
 // res_Path, and the AIDL clients parse res_Value the same way. Both are
@@ -23,9 +16,8 @@
 
 use crate::io_shim as io;
 use crate::table::{self, Kind};
-/// little / big / prime / "titanium" (the prime cluster; the device has three
-/// clusters, the Qualcomm fourth cluster maps onto prime like MAX_CPUS_TITANIUM
-/// does in the shipped id table)
+/// Cluster anchors: little / big / prime / "titanium", an alias of prime in
+/// the resource id table.
 const CORE_CTL: [&str; 4] = [
     "/sys/devices/system/cpu/cpu0/core_ctl",
     "/sys/devices/system/cpu/cpu4/core_ctl",
@@ -40,12 +32,11 @@ const OVER_UTIL: &str = "/sys/devices/system/cpu/sched-avg/over_util";
 // OPP_IDX=40 MFG_PWR=0". ACTIVE is the share of the sampling window the GPU
 // was busy, which is what the OnePlus GPU_BUSY_PERCENTAGE resource means.
 const MALI_UTIL: &str = "/proc/mtk_mali/utilization";
-// MTK's GED keeps the last GPU load percentage directly.
+// GED keeps the last GPU load percentage directly.
 const GED_LOADING: &str = "/sys/module/ged/parameters/gpu_loading";
 
-/// Node families this port has an equivalent for. A request for any other
-/// node (e.g. a Qualcomm-only /sys/class/kgsl/... path) is refused instead of
-/// silently accepted, matching the shipped core's refusal semantics.
+/// Node families with an equivalent implementation. A request for any other
+/// node is refused instead of silently accepted.
 const WRITABLE_PREFIXES: &[&str] = &[
     "/sys/devices/system/cpu/cpufreq/",
     "/sys/devices/system/cpu/cpu",
@@ -91,8 +82,8 @@ impl UrccCore {
         io::read_file(path).unwrap_or_else(|| "-1".to_string())
     }
 
-    /// Path-addressed write; only node families with an MTK equivalent are
-    /// writable, everything else is refused.
+    /// Path-addressed write; only supported node families are writable,
+    /// everything else is refused.
     pub fn write_node(path: &str, value: &str) -> bool {
         if !WRITABLE_PREFIXES.iter().any(|p| path.starts_with(p)) {
             return false;
@@ -167,7 +158,7 @@ impl UrccCore {
 
         match action {
             // OnePlus raised the EAS migration threshold of the big cluster;
-            // the MTK equivalent is core_ctl's own up/down threshold of that
+            // the equivalent here is core_ctl's own up/down threshold of that
             // cluster, which decides when its CPUs stop running.
             "set_up_thres" | "set_dn_thres" => {
                 let node = if action == "set_up_thres" { "up_thres" } else { "dn_thres" };
@@ -178,8 +169,8 @@ impl UrccCore {
                     Err(format!("write failed: {}", path))
                 }
             }
-            // Qualcomm lifted the boost window on a touch event. Here FPSGO is
-            // the boost engine: enable it and open the uclamp boost gate.
+            // A touch event lifts the boost window. FPSGO is the boost engine
+            // here: enable it and open the uclamp boost gate.
             "touch_boost" => {
                 let on = number != 0;
                 if !io::write_file(&format!("{}/force_onoff", FPSGO_COMMON), if on { "force on" } else { "force off" }) {
@@ -214,9 +205,8 @@ impl Default for UrccCore {
     }
 }
 
-// Compat / simulation sources.
-// Everything below reads nodes verified on the device; see
-// analysis/x6739-node-map.md for the raw capture.
+// Compat / simulation sources: values derived from sysfs nodes for resource
+// classes that do not have a node of their own.
 
 /// Active CPU count of a cluster, as core_ctl reports it.
 fn read_cluster_active(core_ctl: &str) -> String {

@@ -1,15 +1,11 @@
 // File and property plumbing for the URCC HAL.
 //
-// sysfs reads/writes go straight through std::fs; the property API mirrors
-// the shipped liburcccore.so behaviour, where urccPropertyGet/urccPropertySet
-// are thin wrappers over libcutils property_get/property_set (verified at the
-// instruction level in the shipped binary: urccPropertyGet at 0x5b470 calls
-// property_get(key, value, NULL), urccPropertySet at 0x63f5c calls
-// property_set then special-cases vendor.urcc.zdbdebug_on /
-// vendor.urcc.unittest_on). On Android bionic's __system_property_get /
-// __system_property_set are called directly, so no DT_NEEDED for libcutils is
-// needed. Off-target builds get an in-memory store so the core logic can be
-// unit-tested on the host.
+// sysfs reads/writes go straight through std::fs. The property API mirrors
+// property_get/property_set semantics: urccPropertySet special-cases
+// vendor.urcc.zdbdebug_on / vendor.urcc.unittest_on after the write. On Android
+// bionic's __system_property_get / __system_property_set are called directly,
+// so no DT_NEEDED for libcutils is needed. Off-target builds get an in-memory
+// store so the core logic can be unit-tested on the host.
 
 #[cfg(target_os = "android")]
 use std::ffi::CString;

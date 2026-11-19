@@ -1,7 +1,5 @@
-# Pinned to the exact rustc that produced the binary staged in
-# erofs/vendor/bin/hw/vendor.oplus.hardware.urcc-service
-# (rustc 1.99.1, commit 58cf8f9c3). Bump this pin only together with
-# restaging the binary it ships.
+# Pinned rustc toolchain for reproducible builds of the URCC HAL.
+# channel 1.99.1 (commit 58cf8f9c3).
 [toolchain]
 channel = "1.99.1"
 profile = "minimal"

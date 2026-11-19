@@ -2,15 +2,8 @@
 # Copyright (c) 2020-2021 OPLUS Technology(Shanghai) Corp., Ltd.
 # All Rights Reserved
 #
-# The service path is adapted to this port's vendor topology: the shipped
-# reference ran from /odm/bin/hw/, but this port keeps its vendor HALs in
-# /vendor/bin/hw/.
-#
-# The service is no longer a shim over the shipped liburcccore.so: that
-# library drives Qualcomm-only nodes (/sys/class/kgsl/kgsl-3d0/...,
-# /sys/class/devfreq/*qcom,devfreq*...) and faults on this MTK board. The
-# rebuilt service owns the resource mapping and applies the equivalent tuning
-# on the MediaTek nodes that exist.
+# The vendor HAL runs from /vendor/bin/hw/ and owns its resource mapping,
+# applying the equivalent tuning through the backing sysfs nodes.
 #
 service vendor.urcc-hal-aidl /vendor/bin/hw/vendor.oplus.hardware.urcc-service
     class hal
